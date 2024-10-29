@@ -10,7 +10,8 @@ import InterestsFormField from "./InterestsFormField";
 import PrefLanguageFormField from "./PrefLanguageFormField";
 import { newsletterSubscriptionFormSchema } from "@/schemas";
 import { NewsletterSubscriptionForm } from "@/types";
-import { handleOnNewsletterFormSubmit } from "@/lib/utils";
+import { newsletterFormSubmit } from "@/actions/newsletter-form-submit";
+import { getCaptchaToken } from "@/lib/captcha";
 
 export default function NewsletterForm() {
   const form = useForm<NewsletterSubscriptionForm>({
@@ -25,10 +26,17 @@ export default function NewsletterForm() {
   });
 
   async function onSubmit(values: NewsletterSubscriptionForm) {
-    //console.log(values);
     try {
-      await handleOnNewsletterFormSubmit(values);
-      form.reset();
+      const token = await getCaptchaToken();
+      const response = await newsletterFormSubmit(token, values);
+
+      if (response?.success) {
+        console.log("Successfully registered newsletter preferences!");
+        form.reset();
+      } else {
+        console.error(response?.message);
+        console.error(response?.errors);
+      }
     } catch (error) {
       console.error("Unable to register newsletter preferences!");
       console.error(error);
