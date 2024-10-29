@@ -1,6 +1,6 @@
 "use server";
 
-import { verifyCaptchaToken } from "@/lib/captcha";
+import { verifyCaptchaV3Token } from "@/lib/captcha";
 import { NewsletterSubscriptionForm } from "@/types";
 
 export const newsletterFormSubmit = async (
@@ -12,7 +12,7 @@ export const newsletterFormSubmit = async (
   }
 
   // Verify the captcha token
-  const captchaData = await verifyCaptchaToken(token);
+  const captchaData = await verifyCaptchaV3Token(token);
   if (!captchaData) {
     return { success: false, message: "Unable to verify captcha token" };
   }

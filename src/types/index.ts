@@ -14,11 +14,18 @@ type CaptchaErrorCode =
   | "bad-request"
   | "timeout-or-duplicate";
 
-export type CaptchaResponse = {
+export type CaptchaV3Response = {
   success: true | false;
   challenge_ts: Date;
   hostname: string;
   score: number;
   action: string;
+  "error-codes"?: CaptchaErrorCode[];
+};
+
+export type CaptchaV2Response = {
+  success: true | false;
+  challenge_ts: Date;
+  hostname: string;
   "error-codes"?: CaptchaErrorCode[];
 };

@@ -11,9 +11,17 @@ import PrefLanguageFormField from "./PrefLanguageFormField";
 import { newsletterSubscriptionFormSchema } from "@/schemas";
 import { NewsletterSubscriptionForm } from "@/types";
 import { newsletterFormSubmit } from "@/actions/newsletter-form-submit";
-import { getCaptchaToken } from "@/lib/captcha";
+import { getCaptchaV3Token } from "@/lib/captcha";
+import { useRef, useState } from "react";
+import ReCAPTCHA from "react-google-recaptcha";
+import { verifyCaptchaV2Token } from "@/actions/captcha-v2-verification";
+import { verifyCaptchaV3Token } from "@/actions/captcha-v3-verification";
 
 export default function NewsletterForm() {
+  const [isCaptchaV2TokenVisible, setIsCaptchaV2TokenVisible] = useState(false);
+  const [captchaV2Token, setCaptchaV2Token] = useState(null);
+  const recaptchaRef = useRef(null);
+
   const form = useForm<NewsletterSubscriptionForm>({
     resolver: zodResolver(newsletterSubscriptionFormSchema),
     defaultValues: {
@@ -25,10 +33,45 @@ export default function NewsletterForm() {
     mode: "all",
   });
 
+  const handleCaptchaChange = (value) => {
+    setCaptchaV2Token(value);
+  };
+
+  const handleCaptchaV2TokenVisibility = () => {
+    setIsCaptchaV2TokenVisible(true);
+  };
+
   async function onSubmit(values: NewsletterSubscriptionForm) {
     try {
-      const token = await getCaptchaToken();
-      const response = await newsletterFormSubmit(token, values);
+      if (!isCaptchaV2TokenVisible) {
+        // Verify V3 captcha
+        const captchaV3Token = await getCaptchaV3Token();
+        const captchaV3Response = await verifyCaptchaV3Token(captchaV3Token);
+        if (captchaV3Response?.success && captchaV3Response?.score < 0.5) {
+          // Submit Form
+          console.log("Successfully verified captcha V3 token!");
+          console.log("Form Submited");
+        } else if (
+          captchaV3Response?.success &&
+          captchaV3Response?.score > 0.5
+        ) {
+          // Display captcha V2
+          handleCaptchaV2TokenVisibility();
+        }
+      }
+      if (isCaptchaV2TokenVisible) {
+        const captchaV2Response = await verifyCaptchaV2Token(captchaV2Token);
+        if (captchaV2Response?.success) {
+          // Submit Form
+          console.log("Successfully verified captcha V2 token!");
+          console.log("Form Submited");
+        } else {
+          console.error("Unable to verify captcha V2 token!");
+        }
+      }
+
+      /* 
+      const response = await newsletterFormSubmit(token, values); 
 
       if (response?.success) {
         console.log("Successfully registered newsletter preferences!");
@@ -36,7 +79,7 @@ export default function NewsletterForm() {
       } else {
         console.error(response?.message);
         console.error(response?.errors);
-      }
+      }*/
     } catch (error) {
       console.error("Unable to register newsletter preferences!");
       console.error(error);
@@ -66,6 +109,13 @@ export default function NewsletterForm() {
             </Button>
           </form>
         </Form>
+        {isCaptchaV2TokenVisible && (
+          <ReCAPTCHA
+            ref={recaptchaRef}
+            sitekey={process.env.NEXT_PUBLIC_CAPTCHA_V2_SITE_KEY}
+            onChange={handleCaptchaChange}
+          />
+        )}
       </section>
     </>
   );
