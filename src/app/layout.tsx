@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import Script from "next/script";
+import { Toaster } from "@/components/ui/toaster";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -35,6 +36,7 @@ export default function RootLayout({
           src={`https://www.google.com/recaptcha/api.js?render=${siteKey}`}
         />
         {children}
+        <Toaster />
       </body>
     </html>
   );

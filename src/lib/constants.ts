@@ -14,3 +14,6 @@ export const INTERESTS = [
   "Wintersports",
   "Motosports",
 ] as const;
+
+export const URL_VERIFY_CAPTCHA_TOKEN =
+  "https://www.google.com/recaptcha/api/siteverify";
