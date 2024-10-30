@@ -14,8 +14,6 @@ import { newsletterFormSubmit } from "@/actions/newsletter-form-submit";
 import { getCaptchaV3Token } from "@/lib/captcha";
 import { useRef, useState } from "react";
 import ReCAPTCHA from "react-google-recaptcha";
-import { verifyCaptchaV2Token } from "@/actions/captcha-v2-verification";
-import { verifyCaptchaV3Token } from "@/actions/captcha-v3-verification";
 import { useToast } from "@/hooks/use-toast";
 
 const CAPTCHA_V2_SITE_KEY = process.env.NEXT_PUBLIC_CAPTCHA_V2_SITE_KEY;
@@ -24,7 +22,8 @@ export default function NewsletterForm() {
   if (!CAPTCHA_V2_SITE_KEY) {
     throw new Error("CAPTCHA_V2_SITE_KEY is not defined!");
   }
-  const [isCaptchaV2TokenVisible, setIsCaptchaV2TokenVisible] = useState(false);
+
+  const [isCaptchaV2Required, setIsCaptchaV2Required] = useState(false);
   const [captchaV2Token, setCaptchaV2Token] = useState<string | null>(null);
   const recaptchaRef = useRef<ReCAPTCHA>(null);
   const { toast } = useToast();
@@ -40,71 +39,73 @@ export default function NewsletterForm() {
     mode: "all",
   });
 
-  const handleCaptchaChange = (value: string | null) => {
+  const handleCaptchaV2Change = (value: string | null) => {
     setCaptchaV2Token(value);
   };
 
-  const handleCaptchaV2TokenVisibility = (visibilityStatus: boolean) => {
-    setIsCaptchaV2TokenVisible(visibilityStatus);
+  const handleIsCaptchaV2Required = (isRequired: boolean) => {
+    setIsCaptchaV2Required(isRequired);
   };
 
   async function onSubmit(values: NewsletterSubscriptionForm) {
     try {
-      if (!isCaptchaV2TokenVisible) {
-        // Verify V3 captcha
+      if (!isCaptchaV2Required) {
         const captchaV3Token = await getCaptchaV3Token();
-        const captchaV3Response = captchaV3Token
-          ? await verifyCaptchaV3Token(captchaV3Token)
-          : null;
-
-        if (captchaV3Response?.success) {
-          if (captchaV3Response.score < 0.5) {
-            // Score above threshold, proceed to submit form
-            toast({
-              variant: "default",
-              description:
-                "Successfully verified reCAPTCHA v3 token! Form submitted.",
-            });
-            // Submit the form data here
-            // await newsletterFormSubmit(values);
-            form.reset();
-          } else {
-            // Score below threshold, display reCAPTCHA v2
-            toast({
-              variant: "destructive",
-              description:
-                "reCAPTCHA v3 score is below threshold! Use reCaptchaV2.",
-            });
-            handleCaptchaV2TokenVisibility(true);
-            return; // Exit to wait for user interaction
-          }
-        } else {
-          console.error("Unable to verify reCAPTCHA v3 token!");
+        if (!captchaV3Token) {
+          toast({
+            variant: "destructive",
+            description: "Captcha verification failed. Please try again.",
+          });
           return;
+        }
+
+        const response = await newsletterFormSubmit({ captchaV3Token, values });
+
+        if (response.success) {
+          form.reset();
+          toast({
+            variant: "default",
+            description:
+              "Successfully verified reCAPTCHA v3 token! Form submitted.",
+          });
+        } else if (response.requiresCaptchaV2) {
+          handleIsCaptchaV2Required(true);
+          toast({
+            variant: "destructive",
+            description:
+              "reCAPTCHA v3 score is below threshold! Use reCaptcha V2.",
+          });
+        } else {
+          toast({
+            variant: "destructive",
+            description:
+              response?.message || "An error occurred. Please try again.",
+          });
         }
       } else {
         if (!captchaV2Token) {
           console.error("Please complete the reCAPTCHA verification.");
           return;
         }
-        const captchaV2Response = await verifyCaptchaV2Token(captchaV2Token);
-        if (captchaV2Response?.success) {
+        const response = await newsletterFormSubmit({ captchaV2Token, values });
+
+        if (response.success) {
+          form.reset();
+          handleIsCaptchaV2Required(false);
+
           toast({
             variant: "default",
             description:
               "Successfully verified reCAPTCHA v2 token! Form submitted.",
           });
-          // Submit the form data here
-          //await newsletterFormSubmit(values);
-          form.reset();
-          // Reset reCAPTCHA v2 state
-          handleCaptchaV2TokenVisibility(false);
-          setCaptchaV2Token(null);
         } else {
-          console.error("Unable to verify reCAPTCHA v2 token!");
+          toast({
+            variant: "destructive",
+            description: "CAPTCHA verification failed. Please try again.",
+          });
           recaptchaRef.current?.reset();
-          setCaptchaV2Token(null);
         }
+        handleCaptchaV2Change(null);
       }
     } catch (error) {
       console.error("Unable to register newsletter preferences!");
@@ -134,18 +135,18 @@ export default function NewsletterForm() {
               type="submit"
               disabled={
                 !form.formState.isValid ||
-                (isCaptchaV2TokenVisible && !captchaV2Token)
+                (isCaptchaV2Required && !captchaV2Token)
               }
             >
               SIGN UP
             </Button>
           </form>
         </Form>
-        {isCaptchaV2TokenVisible && (
+        {isCaptchaV2Required && (
           <ReCAPTCHA
             ref={recaptchaRef}
             sitekey={CAPTCHA_V2_SITE_KEY}
-            onChange={handleCaptchaChange}
+            onChange={handleCaptchaV2Change}
           />
         )}
       </section>
