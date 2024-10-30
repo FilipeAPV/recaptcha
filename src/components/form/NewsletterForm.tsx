@@ -12,9 +12,10 @@ import { newsletterSubscriptionFormSchema } from "@/schemas";
 import { NewsletterSubscriptionForm } from "@/types";
 import { newsletterFormSubmit } from "@/actions/newsletter-form-submit";
 import { getCaptchaV3Token } from "@/lib/captcha";
-import { useRef, useState } from "react";
+import { useRef, useState, useTransition } from "react";
 import ReCAPTCHA from "react-google-recaptcha";
 import { useToast } from "@/hooks/use-toast";
+import { Loader2 } from "lucide-react";
 
 const CAPTCHA_V2_SITE_KEY = process.env.NEXT_PUBLIC_CAPTCHA_V2_SITE_KEY;
 
@@ -25,6 +26,7 @@ export default function NewsletterForm() {
 
   const [isCaptchaV2Required, setIsCaptchaV2Required] = useState(false);
   const [captchaV2Token, setCaptchaV2Token] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
   const recaptchaRef = useRef<ReCAPTCHA>(null);
   const { toast } = useToast();
 
@@ -59,52 +61,62 @@ export default function NewsletterForm() {
           return;
         }
 
-        const response = await newsletterFormSubmit({ captchaV3Token, values });
-
-        if (response.success) {
-          form.reset();
-          toast({
-            variant: "default",
-            description:
-              "Successfully verified reCAPTCHA v3 token! Form submitted.",
+        startTransition(async () => {
+          const response = await newsletterFormSubmit({
+            captchaV3Token,
+            values,
           });
-        } else if (response.requiresCaptchaV2) {
-          handleIsCaptchaV2Required(true);
-          toast({
-            variant: "destructive",
-            description:
-              "reCAPTCHA v3 score is below threshold! Use reCaptcha V2.",
-          });
-        } else {
-          toast({
-            variant: "destructive",
-            description:
-              response?.message || "An error occurred. Please try again.",
-          });
-        }
+          if (response.success) {
+            form.reset();
+            toast({
+              variant: "default",
+              description: response.message,
+            });
+          } else if (response.requiresCaptchaV2) {
+            handleIsCaptchaV2Required(true);
+            toast({
+              variant: "destructive",
+              description: response.message,
+            });
+          } else {
+            toast({
+              variant: "destructive",
+              description:
+                response?.message || "An error occurred. Please try again.",
+            });
+          }
+        });
       } else {
         if (!captchaV2Token) {
           console.error("Please complete the reCAPTCHA verification.");
           return;
         }
-        const response = await newsletterFormSubmit({ captchaV2Token, values });
 
-        if (response.success) {
-          form.reset();
-          handleIsCaptchaV2Required(false);
+        startTransition(async () => {
+          const response = await newsletterFormSubmit({
+            captchaV2Token,
+            values,
+          });
 
-          toast({
-            variant: "default",
-            description:
-              "Successfully verified reCAPTCHA v2 token! Form submitted.",
-          });
-        } else {
-          toast({
-            variant: "destructive",
-            description: "CAPTCHA verification failed. Please try again.",
-          });
-          recaptchaRef.current?.reset();
-        }
+          if (response.success) {
+            form.reset();
+            handleIsCaptchaV2Required(false);
+
+            toast({
+              variant: "default",
+              description: response.message,
+            });
+          } else {
+            toast({
+              variant: "destructive",
+              description:
+                response?.message ||
+                "CAPTCHA verification failed. Please try again.",
+            });
+            recaptchaRef.current?.reset();
+          }
+        });
+
         handleCaptchaV2Change(null);
       }
     } catch (error) {
@@ -135,10 +147,16 @@ export default function NewsletterForm() {
               type="submit"
               disabled={
                 !form.formState.isValid ||
-                (isCaptchaV2Required && !captchaV2Token)
+                (isCaptchaV2Required && !captchaV2Token) ||
+                isPending
               }
+              className="w-full"
             >
-              SIGN UP
+              {isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                "SIGN UP"
+              )}
             </Button>
           </form>
         </Form>
