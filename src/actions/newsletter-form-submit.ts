@@ -1,43 +1,44 @@
 "use server";
 
 import { verifyCaptchaV3Token, verifyCaptchaV2Token } from "@/lib/captcha";
-import { NewsletterSubscriptionForm } from "@/types";
+import { CAPTCHA_TYPE_V2, CAPTCHA_TYPE_V3 } from "@/lib/constants";
+import { CaptchaToken, CaptchaType, NewsletterSubscriptionForm } from "@/types";
 
 type NewsletterFormSubmitProps = {
-  captchaV3Token?: string;
-  captchaV2Token?: string;
-  values: NewsletterSubscriptionForm;
+  captchaToken: CaptchaToken;
+  captchaType: CaptchaType;
+  formValues: NewsletterSubscriptionForm;
 };
 
 export const newsletterFormSubmit = async ({
-  captchaV3Token,
-  captchaV2Token,
-  values,
+  captchaToken,
+  captchaType,
+  formValues,
 }: NewsletterFormSubmitProps) => {
-  if (!captchaV3Token && !captchaV2Token) {
+  if (!captchaToken) {
     return { success: false, message: "Captcha token is required" };
   }
 
-  if (captchaV3Token && !captchaV2Token) {
-    const captchaData = await verifyCaptchaV3Token(captchaV3Token);
-    if (!captchaData) {
-      return { success: false, message: "Unable to verify captcha token" };
-    }
-    if (!captchaData.success || captchaData.score > 0.5) {
+  if (captchaType === CAPTCHA_TYPE_V3) {
+    const captchaData = await verifyCaptchaV3Token(captchaToken);
+    if (!captchaData || !captchaData.success) {
       return {
         success: false,
         message: "Captcha verification failed",
         requiresCaptchaV2: true,
       };
     }
-  }
 
-  if (!captchaV3Token && captchaV2Token) {
-    const captchaData = await verifyCaptchaV2Token(captchaV2Token);
-    if (!captchaData) {
-      return { success: false, message: "Unable to verify captcha token" };
+    if (captchaData.score > 0.5) {
+      return {
+        success: false,
+        message: "Low captcha score",
+        requiresCaptchaV2: true,
+      };
     }
-    if (!captchaData.success) {
+  } else if (captchaType === CAPTCHA_TYPE_V2) {
+    const captchaData = await verifyCaptchaV2Token(captchaToken);
+    if (!captchaData || !captchaData.success) {
       return {
         success: false,
         message: "Captcha verification failed",
@@ -46,7 +47,7 @@ export const newsletterFormSubmit = async ({
   }
 
   //Persist the form data
-  console.log(values);
+  console.log("Form data:", formValues);
   return {
     success: true,
     message: "Successfully subscribed to newsletter",

@@ -9,13 +9,14 @@ import { Button } from "../ui/button";
 import InterestsFormField from "./InterestsFormField";
 import PrefLanguageFormField from "./PrefLanguageFormField";
 import { newsletterSubscriptionFormSchema } from "@/schemas";
-import { NewsletterSubscriptionForm } from "@/types";
+import { CaptchaToken, CaptchaType, NewsletterSubscriptionForm } from "@/types";
 import { newsletterFormSubmit } from "@/actions/newsletter-form-submit";
 import { getCaptchaV3Token } from "@/lib/captcha";
 import { useRef, useState, useTransition } from "react";
 import ReCAPTCHA from "react-google-recaptcha";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
+import { CAPTCHA_TYPE_V2, CAPTCHA_TYPE_V3 } from "@/lib/constants";
 
 const CAPTCHA_V2_SITE_KEY = process.env.NEXT_PUBLIC_CAPTCHA_V2_SITE_KEY;
 
@@ -25,7 +26,7 @@ export default function NewsletterForm() {
   }
 
   const [isCaptchaV2Required, setIsCaptchaV2Required] = useState(false);
-  const [captchaV2Token, setCaptchaV2Token] = useState<string | null>(null);
+  const [captchaV2Token, setCaptchaV2Token] = useState<CaptchaToken>(null);
   const [isPending, startTransition] = useTransition();
   const recaptchaRef = useRef<ReCAPTCHA>(null);
   const { toast } = useToast();
@@ -41,87 +42,80 @@ export default function NewsletterForm() {
     mode: "all",
   });
 
-  const handleCaptchaV2Change = (value: string | null) => {
-    setCaptchaV2Token(value);
+  const updateCaptchaV2Token = (token: CaptchaToken) => {
+    setCaptchaV2Token(token);
   };
 
-  const handleIsCaptchaV2Required = (isRequired: boolean) => {
+  const toggleCaptchaV2Requirement = (isRequired: boolean) => {
     setIsCaptchaV2Required(isRequired);
   };
 
-  async function onSubmit(values: NewsletterSubscriptionForm) {
+  async function onSubmit(formValues: NewsletterSubscriptionForm) {
     try {
-      if (!isCaptchaV2Required) {
-        const captchaV3Token = await getCaptchaV3Token();
-        if (!captchaV3Token) {
+      let captchaToken: CaptchaToken = null;
+      let captchaType: CaptchaType = CAPTCHA_TYPE_V3;
+
+      if (isCaptchaV2Required) {
+        if (!captchaV2Token) {
+          toast({
+            variant: "destructive",
+            description: "Please complete the CAPTCHA challenge.",
+          });
+          return;
+        }
+        captchaToken = captchaV2Token;
+        captchaType = CAPTCHA_TYPE_V2;
+      } else {
+        captchaToken = await getCaptchaV3Token();
+        if (!captchaToken) {
           toast({
             variant: "destructive",
             description: "Captcha verification failed. Please try again.",
           });
           return;
         }
-
-        startTransition(async () => {
-          const response = await newsletterFormSubmit({
-            captchaV3Token,
-            values,
-          });
-          if (response.success) {
-            form.reset();
-            toast({
-              variant: "default",
-              description: response.message,
-            });
-          } else if (response.requiresCaptchaV2) {
-            handleIsCaptchaV2Required(true);
-            toast({
-              variant: "destructive",
-              description: response.message,
-            });
-          } else {
-            toast({
-              variant: "destructive",
-              description:
-                response?.message || "An error occurred. Please try again.",
-            });
-          }
-        });
-      } else {
-        if (!captchaV2Token) {
-          console.error("Please complete the reCAPTCHA verification.");
-          return;
-        }
-
-        startTransition(async () => {
-          const response = await newsletterFormSubmit({
-            captchaV2Token,
-            values,
-          });
-
-          if (response.success) {
-            form.reset();
-            handleIsCaptchaV2Required(false);
-
-            toast({
-              variant: "default",
-              description: response.message,
-            });
-          } else {
-            toast({
-              variant: "destructive",
-              description:
-                response?.message ||
-                "CAPTCHA verification failed. Please try again.",
-            });
-            recaptchaRef.current?.reset();
-          }
-        });
-
-        handleCaptchaV2Change(null);
       }
+
+      startTransition(async () => {
+        const response = await newsletterFormSubmit({
+          captchaToken,
+          captchaType,
+          formValues,
+        });
+
+        if (response.success) {
+          form.reset();
+          toggleCaptchaV2Requirement(false);
+          setCaptchaV2Token(null);
+          toast({
+            variant: "default",
+            description: response.message,
+          });
+        } else if (response.requiresCaptchaV2) {
+          toggleCaptchaV2Requirement(true);
+          toast({
+            variant: "default",
+            description:
+              "Additional verification required. Please complete the CAPTCHA.",
+          });
+        } else {
+          toast({
+            variant: "destructive",
+            description:
+              response.message || "An error occurred. Please try again.",
+          });
+          if (isCaptchaV2Required) {
+            recaptchaRef.current?.reset();
+            setCaptchaV2Token(null);
+          }
+        }
+      });
     } catch (error) {
-      console.error("Unable to register newsletter preferences!");
-      console.error(error);
+      console.error("Unable to register newsletter preferences!", error);
+      toast({
+        variant: "destructive",
+        description: "An unexpected error occurred. Please try again.",
+      });
     }
   }
 
@@ -143,12 +137,19 @@ export default function NewsletterForm() {
               formFieldName="isAgreed"
               labelText="I agree with the Privacy Policy *"
             />
+            {isCaptchaV2Required && (
+              <ReCAPTCHA
+                ref={recaptchaRef}
+                sitekey={CAPTCHA_V2_SITE_KEY}
+                onChange={updateCaptchaV2Token}
+              />
+            )}
             <Button
               type="submit"
               disabled={
                 !form.formState.isValid ||
-                (isCaptchaV2Required && !captchaV2Token) ||
-                isPending
+                isPending ||
+                (isCaptchaV2Required && !captchaV2Token)
               }
               className="w-full"
             >
@@ -160,13 +161,6 @@ export default function NewsletterForm() {
             </Button>
           </form>
         </Form>
-        {isCaptchaV2Required && (
-          <ReCAPTCHA
-            ref={recaptchaRef}
-            sitekey={CAPTCHA_V2_SITE_KEY}
-            onChange={handleCaptchaV2Change}
-          />
-        )}
       </section>
     </>
   );

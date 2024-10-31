@@ -29,3 +29,6 @@ export type CaptchaV2Response = {
   hostname: string;
   "error-codes"?: CaptchaErrorCode[];
 };
+
+export type CaptchaToken = string | null;
+export type CaptchaType = "v2" | "v3";

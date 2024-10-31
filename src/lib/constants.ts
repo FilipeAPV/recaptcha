@@ -17,3 +17,6 @@ export const INTERESTS = [
 
 export const URL_VERIFY_CAPTCHA_TOKEN =
   "https://www.google.com/recaptcha/api/siteverify";
+
+export const CAPTCHA_TYPE_V2 = "v2";
+export const CAPTCHA_TYPE_V3 = "v3";
