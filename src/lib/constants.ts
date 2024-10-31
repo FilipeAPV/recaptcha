@@ -20,3 +20,6 @@ export const URL_VERIFY_CAPTCHA_TOKEN =
 
 export const CAPTCHA_TYPE_V2 = "v2";
 export const CAPTCHA_TYPE_V3 = "v3";
+
+export const HOSTNAME = "localhost";
+export const GRECAPTCHA_EXECUTE_ACTION = "submitNewsletterForm";

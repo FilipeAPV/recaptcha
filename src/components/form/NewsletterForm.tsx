@@ -9,14 +9,17 @@ import { Button } from "../ui/button";
 import InterestsFormField from "./InterestsFormField";
 import PrefLanguageFormField from "./PrefLanguageFormField";
 import { newsletterSubscriptionFormSchema } from "@/schemas";
-import { CaptchaToken, CaptchaType, NewsletterSubscriptionForm } from "@/types";
+import {
+  CaptchaToken,
+  NewsletterFormSubmitResponse,
+  NewsletterSubscriptionForm,
+} from "@/types";
 import { newsletterFormSubmit } from "@/actions/newsletter-form-submit";
-import { getCaptchaV3Token } from "@/lib/captcha";
-import { useRef, useState, useTransition } from "react";
+import { useTransition } from "react";
 import ReCAPTCHA from "react-google-recaptcha";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
-import { CAPTCHA_TYPE_V2, CAPTCHA_TYPE_V3 } from "@/lib/constants";
+import useCaptcha from "@/hooks/use-captcha";
 
 const CAPTCHA_V2_SITE_KEY = process.env.NEXT_PUBLIC_CAPTCHA_V2_SITE_KEY;
 
@@ -25,10 +28,15 @@ export default function NewsletterForm() {
     throw new Error("CAPTCHA_V2_SITE_KEY is not defined!");
   }
 
-  const [isCaptchaV2Required, setIsCaptchaV2Required] = useState(false);
-  const [captchaV2Token, setCaptchaV2Token] = useState<CaptchaToken>(null);
+  const {
+    captchaState,
+    dispatchCaptcha,
+    recaptchaRef,
+    getCaptchaToken,
+    resetCaptcha,
+  } = useCaptcha();
+
   const [isPending, startTransition] = useTransition();
-  const recaptchaRef = useRef<ReCAPTCHA>(null);
   const { toast } = useToast();
 
   const form = useForm<NewsletterSubscriptionForm>({
@@ -43,38 +51,25 @@ export default function NewsletterForm() {
   });
 
   const updateCaptchaV2Token = (token: CaptchaToken) => {
-    setCaptchaV2Token(token);
+    dispatchCaptcha({ type: "SET_V2_TOKEN", payload: token });
   };
 
   const toggleCaptchaV2Requirement = (isRequired: boolean) => {
-    setIsCaptchaV2Required(isRequired);
+    dispatchCaptcha({ type: "SET_V2_REQUIRED", payload: isRequired });
   };
 
   async function onSubmit(formValues: NewsletterSubscriptionForm) {
     try {
-      let captchaToken: CaptchaToken = null;
-      let captchaType: CaptchaType = CAPTCHA_TYPE_V3;
-
-      if (isCaptchaV2Required) {
-        if (!captchaV2Token) {
-          toast({
-            variant: "destructive",
-            description: "Please complete the CAPTCHA challenge.",
-          });
-          return;
-        }
-        captchaToken = captchaV2Token;
-        captchaType = CAPTCHA_TYPE_V2;
-      } else {
-        captchaToken = await getCaptchaV3Token();
-        if (!captchaToken) {
-          toast({
-            variant: "destructive",
-            description: "Captcha verification failed. Please try again.",
-          });
-          return;
-        }
+      const captchaResult = await getCaptchaToken();
+      if (!captchaResult) {
+        toast({
+          variant: "destructive",
+          description: "Please complete the CAPTCHA challenge.",
+        });
+        return;
       }
+
+      const { token: captchaToken, type: captchaType } = captchaResult;
 
       startTransition(async () => {
         const response = await newsletterFormSubmit({
@@ -82,33 +77,7 @@ export default function NewsletterForm() {
           captchaType,
           formValues,
         });
-
-        if (response.success) {
-          form.reset();
-          toggleCaptchaV2Requirement(false);
-          setCaptchaV2Token(null);
-          toast({
-            variant: "default",
-            description: response.message,
-          });
-        } else if (response.requiresCaptchaV2) {
-          toggleCaptchaV2Requirement(true);
-          toast({
-            variant: "default",
-            description:
-              "Additional verification required. Please complete the CAPTCHA.",
-          });
-        } else {
-          toast({
-            variant: "destructive",
-            description:
-              response.message || "An error occurred. Please try again.",
-          });
-          if (isCaptchaV2Required) {
-            recaptchaRef.current?.reset();
-            setCaptchaV2Token(null);
-          }
-        }
+        handleResponse(response);
       });
     } catch (error) {
       console.error("Unable to register newsletter preferences!", error);
@@ -118,6 +87,32 @@ export default function NewsletterForm() {
       });
     }
   }
+
+  const handleResponse = (response: NewsletterFormSubmitResponse) => {
+    if (response.success) {
+      form.reset();
+      resetCaptcha();
+      toast({
+        variant: "default",
+        description: response.message,
+      });
+    } else if (response.requiresCaptchaV2) {
+      toggleCaptchaV2Requirement(true);
+      toast({
+        variant: "default",
+        description:
+          "Additional verification required. Please complete the CAPTCHA.",
+      });
+    } else {
+      toast({
+        variant: "destructive",
+        description: response.message || "An error occurred. Please try again.",
+      });
+      if (captchaState.isV2Required) {
+        resetCaptcha();
+      }
+    }
+  };
 
   return (
     <>
@@ -137,7 +132,7 @@ export default function NewsletterForm() {
               formFieldName="isAgreed"
               labelText="I agree with the Privacy Policy *"
             />
-            {isCaptchaV2Required && (
+            {captchaState.isV2Required && (
               <ReCAPTCHA
                 ref={recaptchaRef}
                 sitekey={CAPTCHA_V2_SITE_KEY}
@@ -149,7 +144,7 @@ export default function NewsletterForm() {
               disabled={
                 !form.formState.isValid ||
                 isPending ||
-                (isCaptchaV2Required && !captchaV2Token)
+                (captchaState.isV2Required && !captchaState.v2Token)
               }
               className="w-full"
             >

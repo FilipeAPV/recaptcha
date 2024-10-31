@@ -1,6 +1,13 @@
-import { URL_VERIFY_CAPTCHA_TOKEN } from "@/lib/constants";
+import {
+  GRECAPTCHA_EXECUTE_ACTION,
+  URL_VERIFY_CAPTCHA_TOKEN,
+} from "@/lib/constants";
 import { CaptchaV2Response, CaptchaV3Response } from "@/types";
 
+/**
+ * https://developers.google.com/recaptcha/docs/v3
+ * If you're protecting an action with reCAPTCHA, make sure to call execute when the user takes the action rather than on page load.
+ */
 export const getCaptchaV3Token = async () => {
   const siteKey = process.env.NEXT_PUBLIC_CAPTCHA_V3_SITE_KEY;
 
@@ -11,12 +18,17 @@ export const getCaptchaV3Token = async () => {
         return;
       }
       const token = await grecaptcha.execute(siteKey, {
-        action: "submitNewsletterForm",
+        action: GRECAPTCHA_EXECUTE_ACTION,
       });
       resolve(token);
     });
   });
 };
+
+/**
+ * https://developers.google.com/recaptcha/docs/verify
+ * After you get the response token, you need to verify it within two minutes with reCAPTCHA using the API to ensure the token is valid.
+ */
 
 export const verifyCaptchaV2Token = async (token: string) => {
   const secretKey = process.env.CAPTCHA_V2_SECRET_KEY;

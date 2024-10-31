@@ -32,3 +32,19 @@ export type CaptchaV2Response = {
 
 export type CaptchaToken = string | null;
 export type CaptchaType = "v2" | "v3";
+
+export type NewsletterFormSubmitResponse = {
+  success: boolean;
+  message: string;
+  requiresCaptchaV2?: boolean;
+};
+
+export type CaptchaState = {
+  isV2Required: boolean;
+  v2Token: CaptchaToken | null;
+};
+
+export type CaptchaAction =
+  | { type: "SET_V2_REQUIRED"; payload: boolean }
+  | { type: "SET_V2_TOKEN"; payload: CaptchaToken | null }
+  | { type: "RESET" };
